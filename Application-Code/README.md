@@ -207,3 +207,6 @@ Tell me which phase you want to **start implementing now**, and I’ll help you:
 * Define *success criteria* for that phase
 * Identify *common traps*
 * Decide when it’s safe to move forward
+
+
+630, 64, -676
