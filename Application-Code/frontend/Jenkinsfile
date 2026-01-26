@@ -1,0 +1,120 @@
+pipeline {
+    agent any
+
+    environment {
+        REGISTRY = "ritesh57"
+        IMAGE_NAME = "application-code-frontend"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+        HELM_VALUES_FILE = "ArgoCD/frontend/values.yaml"
+    }
+
+    stages {
+
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir('Application-Code/frontend') {
+                    sh 'npm ci'
+                }
+            }
+        }
+
+        stage('Unit Tests') {
+            steps {
+                dir('Application-Code/frontend') {
+                    sh 'npm test'
+                }
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            environment {
+                SONAR_SCANNER_HOME = tool 'sonar-scanner'
+            }
+            steps {
+                dir('Application-Code/frontend') {
+                    withSonarQubeEnv('sonarqube-server') {
+                        sh """
+                        ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                          -Dsonar.projectKey=frontend \
+                          -Dsonar.sources=.
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
+        stage('Trivy FS Scan') {
+            steps {
+                dir('application-code/frontend') {
+                    sh 'trivy fs --exit-code 1 --severity HIGH,CRITICAL .'
+                }
+            }
+        }
+
+        stage('Docker Build') {
+            steps {
+                dir('application-code/frontend') {
+                    sh """
+                    docker build \
+                      -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .
+                    """
+                }
+            }
+        }
+
+        stage('Docker Push') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+                    """
+                }
+            }
+        }
+
+        stage('Update Helm Values') {
+            steps {
+                sh """
+                yq e '.image.tag = "${IMAGE_TAG}"' -i ${HELM_VALUES_FILE}
+                """
+            }
+        }
+
+        stage('Git Commit & Push') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'git-creds',
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_PASS'
+                )]) {
+                    sh """
+                    git config user.email "ci@jenkins"
+                    git config user.name "jenkins-ci"
+                    git add ${HELM_VALUES_FILE}
+                    git commit -m "chore(frontend): bump image to ${IMAGE_TAG}"
+                    git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-DevOps-Project.git HEAD:main
+                    """
+                }
+            }
+        }
+    }
+}
