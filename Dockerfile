@@ -40,13 +40,13 @@ RUN wget -q https://github.com/aquasecurity/trivy/releases/download/v0.49.1/triv
 # Sonar Scanner
 # -----------------------------
 # Install sonar-scanner
+# Install sonar-scanner
 RUN wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip \
-    && mkdir -p /opt/sonar-scanner \
-    && bsdtar -xf sonar-scanner-cli-5.0.1.3006-linux.zip -C /opt \
+    && mkdir -p /opt \
+    && tar -xf sonar-scanner-cli-5.0.1.3006-linux.zip -C /opt \
     && mv /opt/sonar-scanner-5.0.1.3006-linux /opt/sonar-scanner \
     && ln -s /opt/sonar-scanner/bin/sonar-scanner /usr/local/bin/sonar-scanner \
     && rm sonar-scanner-cli-5.0.1.3006-linux.zip
-
 
 ENV JAVA_HOME=/usr/lib/jvm/default-jvm
 ENV PATH="$PATH:/opt/sonar-scanner/bin"
