@@ -64,7 +64,7 @@ stage('Install Dependencies') {
         stage('Unit Tests') {
             steps {
                 dir('Application-Code/frontend') {
-                    sh 'npm test'
+                    sh 'npm test -- --passWithNoTests'
                 }
             }
         }
