@@ -1,24 +1,23 @@
 community:
   enabled: true
 
-sonarqube:
-  image:
-    repository: sonarqube
-    tag: 25.12.0.117093-community
-    pullPolicy: IfNotPresent
+image:
+  repository: sonarqube
+  tag: 25.12.0.117093-community
+  pullPolicy: IfNotPresent
 
 postgresql:
   enabled: true
   auth:
-    existingSecret: sonarqube-postgresql
     username: sonar
+    password: sonar
     database: sonarqube
-
-monitoringPasscodeSecretName: sonarqube-monitoring
-monitoringPasscodeSecretKey: monitoringPasscode
 
 persistence:
   enabled: false
+
+monitoringPasscodeSecretName: sonarqube-monitoring
+monitoringPasscodeSecretKey: monitoringPasscode
 
 resources:
   requests:
