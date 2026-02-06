@@ -69,21 +69,21 @@ stage('Install Dependencies') {
         }
 stage('SonarQube Analysis') {
     environment {
-        SCANNER_HOME = tool 'sonar-scanner'
+        SONAR_SCANNER_HOME = tool 'sonar-scanner'
     }
     steps {
-        withSonarQubeEnv('sonarqube') {
-            sh """
-              ${SCANNER_HOME}/bin/sonar-scanner \
-              -Dsonar.projectKey=frontend-app \
-              -Dsonar.projectName=frontend-app \
-              -Dsonar.sources=src \
-              -Dsonar.language=js \
-              -Dsonar.sourceEncoding=UTF-8
-            """
+        dir('Application-Code/frontend') {
+            withSonarQubeEnv('sonarqube-server') {
+                sh """
+                ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
+                  -Dsonar.projectKey=frontend \
+                  -Dsonar.sources=.
+                """
+            }
         }
     }
 }
+
 
         stage('Quality Gate') {
             steps {
