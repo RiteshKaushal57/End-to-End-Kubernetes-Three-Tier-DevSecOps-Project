@@ -55,10 +55,21 @@ spec:
 stage('Install Dependencies') {
   steps {
     dir('Application-Code/frontend') {
-      sh 'npm ci'
+      sh '''
+        npm config set fund false
+        npm config set audit false
+
+        if [ -d node_modules ]; then
+          echo "Reusing cached dependencies"
+          npm rebuild
+        else
+          npm ci --prefer-offline
+        fi
+      '''
     }
   }
 }
+
 
         stage('Unit Tests') {
             steps {
