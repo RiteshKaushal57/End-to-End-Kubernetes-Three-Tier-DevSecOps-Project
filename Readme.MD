@@ -16,3 +16,7 @@ helm install sonarqube sonarqube/sonarqube \
   -n sonarqube \
   --create-namespace \
   -f values.yaml
+
+taskkill /IM "Docker Desktop.exe" /F
+taskkill /IM "com.docker.backend.exe" /F
+taskkill /IM "com.docker.proxy.exe" /F
