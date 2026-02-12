@@ -8,7 +8,7 @@ kind: Pod
 spec:
   containers:
     - name: node
-      image: node:20
+      image: ritesh57/ci-tools:latest
       command: ['cat']
       tty: true
 
