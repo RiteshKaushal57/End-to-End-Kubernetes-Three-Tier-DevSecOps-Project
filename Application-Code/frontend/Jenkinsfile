@@ -56,9 +56,9 @@ stage('Install Dependencies') {
   steps {
     dir('Application-Code/frontend') {
       sh '''
-        echo "Using persistent npm cache..."
+        echo "Using persistent npm cache in Jenkins home..."
 
-        npm config set cache /root/.npm
+        npm config set cache /var/jenkins_home/.npm
         npm config set registry https://registry.npmjs.org/
         npm config set fund false
         npm config set audit false
@@ -72,6 +72,7 @@ stage('Install Dependencies') {
     }
   }
 }
+
 
 
 
