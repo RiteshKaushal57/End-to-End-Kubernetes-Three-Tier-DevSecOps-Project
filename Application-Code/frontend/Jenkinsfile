@@ -1,156 +1,168 @@
+pipeline {
 
-  pipeline {
-  agent any
+  agent {
+    kubernetes {
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+    - name: node
+      image: node:20
+      command: ['cat']
+      tty: true
 
+    - name: docker
+      image: docker:24
+      command: ['cat']
+      tty: true
+      volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
 
+    - name: trivy
+      image: aquasec/trivy:latest
+      command: ['cat']
+      tty: true
 
-    environment {
-        REGISTRY = "ritesh57"
-        IMAGE_NAME = "application-code-frontend"
-        IMAGE_TAG = "${BUILD_NUMBER}"
-        HELM_VALUES_FILE = "ArgoCD/frontend/values.yaml"
-    }
-
-    stages {
-
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Configure npm') {
-  steps {
-    dir('Application-Code/frontend') {
-      sh '''
-        npm config set fetch-retries 5
-        npm config set fetch-retry-mintimeout 20000
-        npm config set fetch-retry-maxtimeout 120000
-        npm config set registry https://registry.npmjs.org/
-      '''
-    }
-  }
-}
-
-stage('Install Dependencies') {
-  steps {
-    dir('Application-Code/frontend') {
-      sh '''
-        echo "Using persistent npm cache..."
-
-        npm config set cache /var/jenkins_home/.npm
-        npm config set registry https://registry.npmjs.org/
-        npm config set fund false
-        npm config set audit false
-        npm config set fetch-retries 5
-        npm config set fetch-retry-factor 2
-        npm config set fetch-retry-mintimeout 20000
-        npm config set fetch-retry-maxtimeout 120000
-
-        npm ci --prefer-offline --no-audit --progress=false
-      '''
+  volumes:
+    - name: docker-sock
+      hostPath:
+        path: /var/run/docker.sock
+"""
+      defaultContainer 'node'
     }
   }
-}
 
+  environment {
+    REGISTRY = "ritesh57"
+    IMAGE_NAME = "application-code-frontend"
+    IMAGE_TAG = "${BUILD_NUMBER}"
+    HELM_VALUES_FILE = "ArgoCD/frontend/values.yaml"
+  }
 
+  stages {
 
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
 
-
-        stage('Unit Tests') {
-            steps {
-                dir('Application-Code/frontend') {
-                    sh 'npm test -- --passWithNoTests'
-                }
-            }
+    stage('Install Dependencies') {
+      steps {
+        container('node') {
+          dir('Application-Code/frontend') {
+            sh '''
+              npm config set registry https://registry.npmjs.org/
+              npm ci --no-audit --progress=false
+            '''
+          }
         }
-stage('SonarQube Analysis') {
-    environment {
+      }
+    }
+
+    stage('Unit Tests') {
+      steps {
+        container('node') {
+          dir('Application-Code/frontend') {
+            sh 'npm test -- --passWithNoTests'
+          }
+        }
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      environment {
         SONAR_SCANNER_HOME = tool 'sonar-scanner'
-    }
-    steps {
-        dir('Application-Code/frontend') {
+      }
+      steps {
+        container('node') {
+          dir('Application-Code/frontend') {
             withSonarQubeEnv('sonarqube-server') {
-                sh """
+              sh """
                 ${SONAR_SCANNER_HOME}/bin/sonar-scanner \
                   -Dsonar.projectKey=frontend \
                   -Dsonar.projectName=frontend \
-                  -Dsonar.sources=src \
-                  -Dsonar.language=js
-                """
+                  -Dsonar.sources=src
+              """
             }
+          }
         }
+      }
     }
-}
 
-
-
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
+    stage('Quality Gate') {
+      steps {
+        timeout(time: 5, unit: 'MINUTES') {
+          waitForQualityGate abortPipeline: true
         }
-
-        stage('Trivy FS Scan') {
-            steps {
-                dir('application-code/frontend') {
-                    sh 'trivy fs --exit-code 1 --severity HIGH,CRITICAL .'
-                }
-            }
-        }
-
-        stage('Docker Build') {
-            steps {
-                dir('application-code/frontend') {
-                    sh """
-                    docker build \
-                      -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .
-                    """
-                }
-            }
-        }
-
-        stage('Docker Push') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'dockerhub-creds',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    sh """
-                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-                    docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-                    """
-                }
-            }
-        }
-
-        stage('Update Helm Values') {
-            steps {
-                sh """
-                yq e '.image.tag = "${IMAGE_TAG}"' -i ${HELM_VALUES_FILE}
-                """
-            }
-        }
-
-        stage('Git Commit & Push') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'git-creds',
-                    usernameVariable: 'GIT_USER',
-                    passwordVariable: 'GIT_PASS'
-                )]) {
-                    sh """
-                    git config user.email "ci@jenkins"
-                    git config user.name "jenkins-ci"
-                    git add ${HELM_VALUES_FILE}
-                    git commit -m "chore(frontend): bump image to ${IMAGE_TAG}"
-                    git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-DevOps-Project.git HEAD:main
-                    """
-                }
-            }
-        }
+      }
     }
+
+    stage('Trivy FS Scan') {
+      steps {
+        container('trivy') {
+          dir('Application-Code/frontend') {
+            sh 'trivy fs --exit-code 1 --severity HIGH,CRITICAL .'
+          }
+        }
+      }
+    }
+
+    stage('Docker Build') {
+      steps {
+        container('docker') {
+          dir('Application-Code/frontend') {
+            sh """
+              docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .
+            """
+          }
+        }
+      }
+    }
+
+    stage('Docker Push') {
+      steps {
+        container('docker') {
+          withCredentials([usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+          )]) {
+            sh """
+              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+              docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+            """
+          }
+        }
+      }
+    }
+
+    stage('Update Helm Values') {
+      steps {
+        sh """
+          yq e '.image.tag = "${IMAGE_TAG}"' -i ${HELM_VALUES_FILE}
+        """
+      }
+    }
+
+    stage('Git Commit & Push') {
+      steps {
+        withCredentials([usernamePassword(
+          credentialsId: 'git-creds',
+          usernameVariable: 'GIT_USER',
+          passwordVariable: 'GIT_PASS'
+        )]) {
+          sh """
+            git config user.email "ci@jenkins"
+            git config user.name "jenkins-ci"
+            git add ${HELM_VALUES_FILE}
+            git commit -m "chore(frontend): bump image to ${IMAGE_TAG}" || echo "No changes to commit"
+            git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-DevOps-Project.git HEAD:main
+          """
+        }
+      }
+    }
+  }
 }
