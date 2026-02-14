@@ -8,12 +8,15 @@ module "vpc" {
   availability_zones = ["ap-south-1a", "ap-south-1b"]
 }
 
+
+
+
 module "eks" {
   source = "./modules/eks"
 
   cluster_name = "devsecops-eks-cluster"
   vpc_id = module.vpc.vpc_id
-  subnet_ids = module.vpc.public_subnet_ids
+  subnet_ids = module.vpc.private_subnet_ids
   node_instance_type = "t3.large"
   desired_size = 1
   min_size = 1
