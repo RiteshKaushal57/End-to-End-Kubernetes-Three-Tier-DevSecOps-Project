@@ -65,7 +65,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-resource "aws_route_table" "privat" {
+resource "aws_route_table" "private" {
   vpc_id = aws_vpc.this.id
 
   route {
