@@ -206,4 +206,51 @@ kubectl apply -n argocd   -f https://raw.githubusercontent.com/argoproj/argo-cd/
 kubectl apply -f mongodb/application.yaml
 kubectl apply -f backend/application.yaml
 kubectl apply -f frontend/application.yaml
+kubectl apply -f ingress.yaml
 ```
+
+## Phase Install Jenkins using Terraform
+
+### Step 1: Add Helm + Kubernetes Providers in Root
+```
+provider "kubernetes" {
+  host                   = module.eks.cluster_endpoint
+  cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+  token                  = data.aws_eks_cluster_auth.cluster.token
+}
+
+provider "helm" {
+  kubernetes = {
+    host = module.eks.cluster_endpoint
+    cluster_ca_certificate = base64decode(module.eks.cluster_certificate_authority_data)
+    token = data.aws_eks_cluster_auth.cluster.token
+  }
+}
+```
+
+### Step 3: Create Jenkins Namespace via Terraform and Add Helm Release for Jenkins inside modules/eks/main.tf
+```
+resource "kubernetes_namespace" "jenkins" {
+  metadata {
+    name = "jenkins"
+  }
+}
+
+resource "helm_release" "jenkins" {
+  name       = "jenkins"
+  namespace  = kubernetes_namespace.jenkins.metadata[0].name
+  repository = "https://charts.jenkins.io"
+  chart      = "jenkins"
+
+  values = [
+    file("${path.module}/jenkins-values.yaml")
+  ]
+
+  depends_on = [
+    aws_eks_node_group.eks_node_group
+  ]
+}
+
+```
+
+### 

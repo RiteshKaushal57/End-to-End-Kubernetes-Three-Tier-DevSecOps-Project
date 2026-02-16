@@ -1,5 +1,6 @@
 controller:
   admin:
+    createSecret: true
     username: admin
     password: admin123
 
@@ -22,12 +23,7 @@ controller:
     - sonar
     - docker-workflow
 
-  containerVolumeMounts:
-    - name: jenkins-home
-      mountPath: /home/jenkins/.npm
-      subPath: .npm
-
 persistence:
   enabled: true
   size: 8Gi
-  storageClass: standard
+  storageClass: gp2
