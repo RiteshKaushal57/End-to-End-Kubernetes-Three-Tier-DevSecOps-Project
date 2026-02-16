@@ -201,16 +201,7 @@ kubectl create ns dev
 kubectl apply -n argocd   -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 ```
 
-### Step 2: Install AWS EBS CSI driver
-It creates storage for MongoDB as it requires PersistentVolume.
-```
-helm repo add aws-ebs-csi-driver https://kubernetes-sigs.github.io/aws-ebs-csi-driver
-helm repo update
-
-helm install aws-ebs-csi-driver aws-ebs-csi-driver/aws-ebs-csi-driver \
-  --namespace kube-system
-```
-### Step 3: Apply your Yamls
+### Step 2: Apply your Yamls
 ```
 kubectl apply -f mongodb/application.yaml
 kubectl apply -f backend/application.yaml
