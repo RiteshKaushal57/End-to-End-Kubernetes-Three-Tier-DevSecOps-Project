@@ -186,3 +186,22 @@ helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
 
 ```
 arn:aws:iam::202749265471:role/devsecops-eks-cluster-AmazonEKSLoadBalancerControllerRole
+
+## PHASE: Deploy your applications
+
+### Step 1: Create Namespace
+```
+kubectl create ns argocd
+```
+
+### Step 2: Install Argocd
+```
+kubectl apply -n argocd   -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+```
+
+### Step 2: Apply your Yamls
+```
+kubectl apply -f mongodb/application.yaml
+kubectl apply -f backend/application.yaml
+kubectl apply -f frontend/application.yaml
+```
