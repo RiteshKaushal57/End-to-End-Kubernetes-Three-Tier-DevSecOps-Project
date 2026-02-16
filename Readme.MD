@@ -55,3 +55,80 @@ kubectl get pods -n sonarqube -w
 kubectl port-forward svc/sonarqube-sonarqube 9000:9000 -n sonarqube
 
 
+### Step 1: Create OIDC Provider in Terraform
+*Inside modules/eks/main.tf*  
+```
+data "aws_eks_cluster" "cluster" {
+  name = aws_eks_cluster.eks_cluster.name
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = aws_eks_cluster.eks_cluster.name
+}
+
+resource "aws_iam_openid_connect_provider" "eks_oidc" {
+  url = data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer
+
+  client_id_list = ["sts.amazonaws.com"]
+
+  thumbprint_list = ["9e99a48a9960b14926bb7f3b02e22da0ecd2b6c3"]
+}
+```
+
+### Step2: Create IAM Policy for ALB Controller
+*Create a new file modules/eks/alb_iam.tf*  
+```
+resource "aws_iam_policy" "alb_controller_policy" {
+  name = "${var.cluster_name}-AWSLoadBalancerControllerIAMPolicy"
+
+  policy = file("${path.module}/iam_policy.json")
+}
+```
+
+**Now download official policy file from inside modules/eks:**
+```
+curl -O https://raw.githubusercontent.com/kubernetes-sigs/aws-load-balancer-controller/v2.11.0/docs/install/iam_policy.json
+```
+
+### Step3: Create IAM Role for Service Account (inside alb_iam.tf)
+```
+data "aws_iam_policy_document" "alb_assume_role_policy" {
+  statement {
+    effect = "Allow"
+
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.eks_oidc.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "${replace(aws_iam_openid_connect_provider.eks_oidc.url, "https://", "")}:sub"
+
+      values = [
+        "system:serviceaccount:kube-system:aws-load-balancer-controller"
+      ]
+    }
+  }
+}
+
+resource "aws_iam_role" "alb_controller_role" {
+  name = "${var.cluster_name}-AmazonEKSLoadBalancerControllerRole"
+
+  assume_role_policy = data.aws_iam_policy_document.alb_assume_role_policy.json
+}
+
+resource "aws_iam_role_policy_attachment" "alb_attach" {
+  role       = aws_iam_role.alb_controller_role.name
+  policy_arn = aws_iam_policy.alb_controller_policy.arn
+}
+```
+
+### Step4: Add Output (inside module/eks/outputs.tf)
+```
+output "alb_controller_role_arn" {
+  value = aws_iam_role.alb_controller_role.arn
+}
+```
