@@ -132,3 +132,25 @@ output "alb_controller_role_arn" {
   value = aws_iam_role.alb_controller_role.arn
 }
 ```
+
+### Step 5: Add Output (inside EKS/outputs.tf)
+```
+output "alb_controller_role_arn" {
+  value = module.eks.alb_controller_role_arn
+}
+```
+
+### Step 6: Apply terraform
+
+## Now bind this IAM role to Kubenetes using IRSA
+
+### Step 1: Get the IAM Role ARN
+```
+terraform output alb_controller_role_arn
+```
+
+### Create Kubernetes Service Account (IIRSA Binding)
+```
+eks.amazonaws.com/role-arn = <IAM_ROLE_ARN>
+```
+arn:aws:iam::202749265471:role/devsecops-eks-cluster-AmazonEKSLoadBalancerControllerRole
