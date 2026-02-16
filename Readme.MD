@@ -149,8 +149,40 @@ output "alb_controller_role_arn" {
 terraform output alb_controller_role_arn
 ```
 
-### Create Kubernetes Service Account (IIRSA Binding)
+## Create Kubernetes Service Account (IIRSA Binding)
+**Create a file in project root folder under k8/platform/aws-load-balancer-controller/serviceaccount.yaml**
 ```
-eks.amazonaws.com/role-arn = <IAM_ROLE_ARN>
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aws-load-balancer-controller
+  namespace: kube-system
+  annotations:
+    eks.amazonaws.com/role-arn: <IAM_ROLE_ARN>
+```
+*Now run*
+```
+kubectl apply -f k8/platform/aws-load-balancer-controller/serviceaccount.yaml
+```
+
+## Install AWS Load Balancer Controller
+
+### Step 1: Add Helm Repo
+```
+helm repo add eks https://aws.github.io/eks-charts
+helm repo update
+```
+
+### Step 2: Install AWS Load Balancer Controller
+```
+helm install aws-load-balancer-controller eks/aws-load-balancer-controller \
+  -n kube-system \
+  --set clusterName=devsecops-eks-cluster \
+  --set serviceAccount.create=false \
+  --set serviceAccount.name=aws-load-balancer-controller \
+  --set region=ap-south-1 \
+  --set vpcId=<your-vpc-id>
+
+
 ```
 arn:aws:iam::202749265471:role/devsecops-eks-cluster-AmazonEKSLoadBalancerControllerRole
