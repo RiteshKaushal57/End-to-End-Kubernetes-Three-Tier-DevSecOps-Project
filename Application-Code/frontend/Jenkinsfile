@@ -97,16 +97,26 @@ spec:
     }
 
     stage('Quality Gate') {
-      steps {
-        script {
-            def qg = waitForQualityGate()
-            if (qg.status != 'OK') {
-              error "Pipeline aborted due to quality gate failure: ${qg.status}"
-            }
-          
-        }
+  steps {
+    script {
+      sleep 60
+      sh '''
+        curl -u ${SONAR_AUTH_TOKEN}: \
+        "${SONAR_HOST_URL}/api/qualitygates/project_status?projectKey=frontend" \
+        | tee qg.json
+      '''
+      def status = sh(
+        script: "cat qg.json | jq -r '.projectStatus.status'",
+        returnStdout: true
+      ).trim()
+
+      if (status != "OK") {
+        error "Quality Gate failed: ${status}"
       }
     }
+  }
+}
+
 
     stage('Trivy FS Scan') {
       steps {
