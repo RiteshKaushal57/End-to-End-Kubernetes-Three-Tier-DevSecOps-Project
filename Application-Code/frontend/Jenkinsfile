@@ -55,9 +55,6 @@ spec:
 
   stages {
 
-    echo "USING NEW JENKINSFILE VERSION 2"
-
-
     stage('Checkout') {
       steps {
         checkout scm
