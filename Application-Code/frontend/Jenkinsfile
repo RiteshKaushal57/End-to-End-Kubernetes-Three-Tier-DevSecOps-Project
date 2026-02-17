@@ -7,55 +7,39 @@ apiVersion: v1
 kind: Pod
 spec:
   containers:
+
     - name: node
       image: node:20
       command: ['cat']
       tty: true
-      resources:
-        requests:
-          memory: "1Gi"
-          cpu: "500m"
-        limits:
-          memory: "2Gi"
-          cpu: "1"
-
 
     - name: sonar
       image: sonarsource/sonar-scanner-cli:latest
       command: ['cat']
       tty: true
-      resources:
-        requests:
-          memory: "1Gi"
-          cpu: "500m"
-        limits:
-          memory: "2Gi"
-          cpu: "1"
-
-
-    - name: maven
-      image: maven:3.9-eclipse-temurin-17
-      command:
-      - cat
-      tty: true
-  
-    - name: docker
-      image: docker:24
-      command: ['cat']
-      tty: true
-      volumeMounts:
-        - name: docker-sock
-          mountPath: /var/run/docker.sock
 
     - name: trivy
       image: aquasec/trivy:latest
       command: ['cat']
       tty: true
 
+    - name: kaniko
+      image: gcr.io/kaniko-project/executor:latest
+      command: ["/busybox/cat"]
+      tty: true
+      volumeMounts:
+        - name: kaniko-secret
+          mountPath: /kaniko/.docker
+
+    - name: git-tools
+      image: alpine/git:latest
+      command: ['cat']
+      tty: true
+
   volumes:
-    - name: docker-sock
-      hostPath:
-        path: /var/run/docker.sock
+    - name: kaniko-secret
+      secret:
+        secretName: dockerhub-secret
 """
       defaultContainer 'node'
     }
@@ -80,10 +64,7 @@ spec:
       steps {
         container('node') {
           dir('Application-Code/frontend') {
-            sh '''
-              npm config set registry https://registry.npmjs.org/
-              npm ci --no-audit --progress=false
-            '''
+            sh 'npm ci'
           }
         }
       }
@@ -100,24 +81,20 @@ spec:
     }
 
     stage('SonarQube Analysis') {
-  steps {
-    container('sonar') {
-      dir('Application-Code/frontend') {
-        withSonarQubeEnv('sonarqube-server') {
-          sh '''
-            sonar-scanner \
-              -Dsonar.projectKey=frontend \
-              -Dsonar.projectName=frontend \
-              -Dsonar.sources=src \
-              -Dsonar.javascript.node.maxspace=2048
-          '''
+      steps {
+        container('sonar') {
+          dir('Application-Code/frontend') {
+            withSonarQubeEnv('sonarqube-server') {
+              sh '''
+                sonar-scanner \
+                -Dsonar.projectKey=frontend \
+                -Dsonar.sources=src
+              '''
+            }
+          }
         }
       }
     }
-  }
-}
-
-
 
     stage('Quality Gate') {
       steps {
@@ -137,59 +114,62 @@ spec:
       }
     }
 
-    stage('Docker Build') {
+    stage('Kaniko Build & Push') {
       steps {
-        container('docker') {
+        container('kaniko') {
           dir('Application-Code/frontend') {
             sh """
-              docker build -t ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} .
+              /kaniko/executor \
+              --dockerfile=Dockerfile \
+              --context=`pwd` \
+              --destination=${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+              --destination=${REGISTRY}/${IMAGE_NAME}:latest
             """
           }
         }
       }
     }
 
-    stage('Docker Push') {
+    stage('Image Scan (Trivy)') {
       steps {
-        container('docker') {
-          withCredentials([usernamePassword(
-            credentialsId: 'dockerhub-creds',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-          )]) {
-            sh """
-              echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
-              docker push ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
-            """
-          }
+        container('trivy') {
+          sh """
+            trivy image --exit-code 1 --severity HIGH,CRITICAL ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}
+          """
         }
       }
     }
 
     stage('Update Helm Values') {
       steps {
-        sh """
-          yq e '.image.tag = "${IMAGE_TAG}"' -i ${HELM_VALUES_FILE}
-        """
+        container('git-tools') {
+          sh """
+            apk add --no-cache yq
+            yq e '.image.tag = "${IMAGE_TAG}"' -i ${HELM_VALUES_FILE}
+          """
+        }
       }
     }
 
     stage('Git Commit & Push') {
       steps {
-        withCredentials([usernamePassword(
-          credentialsId: 'git-creds',
-          usernameVariable: 'GIT_USER',
-          passwordVariable: 'GIT_PASS'
-        )]) {
-          sh """
-            git config user.email "ci@jenkins"
-            git config user.name "jenkins-ci"
-            git add ${HELM_VALUES_FILE}
-            git commit -m "chore(frontend): bump image to ${IMAGE_TAG}" || echo "No changes to commit"
-            git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-DevOps-Project.git HEAD:main
-          """
+        container('git-tools') {
+          withCredentials([usernamePassword(
+            credentialsId: 'git-creds',
+            usernameVariable: 'GIT_USER',
+            passwordVariable: 'GIT_PASS'
+          )]) {
+            sh """
+              git config user.email "ci@jenkins"
+              git config user.name "jenkins-ci"
+              git add ${HELM_VALUES_FILE}
+              git commit -m "chore(frontend): bump image to ${IMAGE_TAG}" || echo "No changes"
+              git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-DevOps-Project.git HEAD:main
+            """
+          }
         }
       }
     }
+
   }
 }

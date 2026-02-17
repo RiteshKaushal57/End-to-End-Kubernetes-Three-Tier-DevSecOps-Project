@@ -93,16 +93,10 @@ resource "aws_eks_node_group" "eks_node_group" {
 ]
 }
 
-data "aws_eks_cluster" "cluster" {
-  name = aws_eks_cluster.eks_cluster.name
-}
 
-data "aws_eks_cluster_auth" "cluster" {
-  name = aws_eks_cluster.eks_cluster.name
-}
 
 resource "aws_iam_openid_connect_provider" "eks_oidc" {
-  url = data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer
+  url = aws_eks_cluster.eks_cluster.identity[0].oidc[0].issuer
 
   client_id_list = ["sts.amazonaws.com"]
 
@@ -120,7 +114,7 @@ data "aws_iam_policy_document" "ebs_csi_assume_role" {
 
     condition {
       test     = "StringEquals"
-      variable = "${replace(data.aws_eks_cluster.cluster.identity[0].oidc[0].issuer, "https://", "")}:sub"
+      variable = "${replace(aws_eks_cluster.eks_cluster.identity[0].oidc[0].issuer, "https://", "")}:sub"
       values   = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
     }
   }
@@ -145,8 +139,3 @@ resource "aws_eks_addon" "ebs_csi" {
   resolve_conflicts_on_update = "OVERWRITE"
 }
 
-resource "kubernetes_namespace" "jenkins" {
-  metadata {
-    name = "jenkins"
-  }
-}

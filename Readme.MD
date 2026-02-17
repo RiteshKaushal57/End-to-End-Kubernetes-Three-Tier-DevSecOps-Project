@@ -56,7 +56,7 @@ kubectl port-forward svc/sonarqube-sonarqube 9000:9000 -n sonarqube
 
 
 ### Step 1: Create OIDC Provider in Terraform
-*Inside modules/eks/main.tf*  
+*Inside modules/eks/main.tf.*  
 ```
 data "aws_eks_cluster" "cluster" {
   name = aws_eks_cluster.eks_cluster.name
@@ -74,6 +74,9 @@ resource "aws_iam_openid_connect_provider" "eks_oidc" {
   thumbprint_list = ["9e99a48a9960b14926bb7f3b02e22da0ecd2b6c3"]
 }
 ```
+*But when we will install Jenkins using Terraform, above two (data) will be shifted to root main.tf file.*   
+*Also, if data is shifted to root main.tf file, then url will change to "url = aws_eks_cluster.eks_cluster.identity[0].oidc[0].issuer"*
+
 
 ### Step2: Create IAM Policy for ALB Controller
 *Create a new file modules/eks/alb_iam.tf*  
@@ -125,6 +128,8 @@ resource "aws_iam_role_policy_attachment" "alb_attach" {
   policy_arn = aws_iam_policy.alb_controller_policy.arn
 }
 ```
+
+*If data is shifted to root main.tf file, then variable will change to -: variable = "${replace(aws_eks_cluster.eks_cluster.identity[0].oidc[0].issuer, "https://", "")}:sub"*
 
 ### Step4: Add Output (inside module/eks/outputs.tf)
 ```
@@ -211,7 +216,7 @@ kubectl apply -f ingress.yaml
 
 ## Phase Install Jenkins using Terraform
 
-### Step 1: Add Helm + Kubernetes Providers in Root
+### Step 1: Add Helm + Kubernetes Providers in Root providers.tf
 ```
 provider "kubernetes" {
   host                   = module.eks.cluster_endpoint
@@ -228,9 +233,9 @@ provider "helm" {
 }
 ```
 
-### Step 3: Create Jenkins Namespace via Terraform and Add Helm Release for Jenkins inside modules/eks/main.tf
+### Step 3: Create Jenkins Namespace via Terraform and Add Helm Release for Jenkins inside modules/jenkins/main.tf
 ```
-resource "kubernetes_namespace" "jenkins" {
+resource "kubernetes_namespace_v1" "jenkins" {
   metadata {
     name = "jenkins"
   }
@@ -238,19 +243,112 @@ resource "kubernetes_namespace" "jenkins" {
 
 resource "helm_release" "jenkins" {
   name       = "jenkins"
-  namespace  = kubernetes_namespace.jenkins.metadata[0].name
+  namespace  = kubernetes_namespace_v1.jenkins.metadata[0].name
   repository = "https://charts.jenkins.io"
   chart      = "jenkins"
 
   values = [
-    file("${path.module}/jenkins-values.yaml")
-  ]
-
-  depends_on = [
-    aws_eks_node_group.eks_node_group
+    file("${path.module}/values.yaml")
   ]
 }
 
 ```
 
-### 
+### Step 4: Add this values.yaml in module/jenkins
+```
+controller:
+  admin:
+    createSecret: true
+    username: admin
+    password: admin123
+
+  serviceType: ClusterIP
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1"
+      memory: "1Gi"
+
+  installPlugins:
+    - kubernetes
+    - workflow-aggregator
+    - git
+    - configuration-as-code
+    - credentials
+    - sonar
+    - docker-workflow
+
+persistence:
+  enabled: true
+  size: 8Gi
+  storageClass: gp2
+```
+
+### Step 5: Add this to root main.tf file
+```
+data "aws_eks_cluster" "cluster" {
+  name = module.eks.cluster_name
+}
+
+data "aws_eks_cluster_auth" "cluster" {
+  name = module.eks.cluster_name
+}
+
+module "jenkins" {
+  source = "./modules/jenkins"
+
+  depends_on = [ module.eks ]
+}
+```
+
+### Step 6: Run
+```
+terraform init
+terraform apply
+kubectl get pods -n jenkins
+```
+
+### Step 7: Expose jenkins using ingress. Create jenkins-ingress.yaml inside k8/jenkins
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jenkins-ingress
+  namespace: jenkins
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jenkins
+                port:
+                  number: 8080
+```
+
+### Step 8: Run
+```
+kubectl apply -f jenkins-ingress.yaml
+kubectl get ingress jenkins-ingress -n jenkins
+kubectl get svc -n jenkins
+```
+*you will get a link like this "http://k8s-jenkins-jenkinsi-c237ef4fb5-316841084.ap-south-1.elb.amazonaws.com/" open in browser.*
+
+### Create Dockerhub secret for Kaniko
+```
+kubectl create secret docker-registry dockerhub-secret \
+  --docker-username=<your-username> \
+  --docker-password=<your-password> \
+  --docker-email=<your-email> \
+  -n jenkins
+
+```
