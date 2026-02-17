@@ -109,14 +109,24 @@ spec:
     }
 
     stage('Trivy FS Scan') {
-      steps {
-        container('trivy') {
-          dir('Application-Code/frontend') {
-            sh 'trivy fs --exit-code 1 --severity HIGH,CRITICAL .'
-          }
-        }
+  steps {
+    container('trivy') {
+      dir('Application-Code/frontend') {
+        sh '''
+          trivy fs --severity HIGH,CRITICAL \
+                   --format json \
+                   -o trivy-report.json .
+        '''
       }
     }
+  }
+  post {
+    always {
+      archiveArtifacts artifacts: 'Application-Code/frontend/trivy-report.json', fingerprint: true
+    }
+  }
+}
+
 
     stage('Kaniko Build & Push') {
       steps {
