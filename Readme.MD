@@ -343,7 +343,127 @@ kubectl get svc -n jenkins
 ```
 *you will get a link like this "http://k8s-jenkins-jenkinsi-c237ef4fb5-316841084.ap-south-1.elb.amazonaws.com/" open in browser.*
 
-### Create Dockerhub secret for Kaniko
+## Add Sonarqube 
+
+### Step 1: Create Sonarqube Namespace via Terraform and Add Helm Release for Sonarqube inside modules/sonarqube/main.tf
+```
+resource "kubernetes_namespace_v1" "sonarqube" {
+  metadata {
+    name = "sonarqube"
+  }
+}
+
+resource "kubernetes_secret_v1" "sonarqube_monitoring" {
+  metadata {
+    name      = "sonarqube-monitoring"
+    namespace = kubernetes_namespace_v1.sonarqube.metadata[0].name
+  }
+
+  data = {
+    monitoringPasscode = base64encode("sonar123")
+  }
+}
+
+resource "helm_release" "sonarqube" {
+  name       = "sonarqube"
+  namespace  = kubernetes_namespace_v1.sonarqube.metadata[0].name
+  repository = "https://SonarSource.github.io/helm-chart-sonarqube"
+  chart      = "sonarqube"
+
+  values = [
+    file("${path.module}/values.yaml")
+  ]
+
+  depends_on = [ kubernetes_secret_v1.sonarqube_monitoring ]
+}
+
+```
+
+### Step 2: Add this values.yaml in module/sonarqube
+```
+community:
+  enabled: true
+
+image:
+  repository: sonarqube
+  tag: 25.12.0.117093-community
+  pullPolicy: IfNotPresent
+
+postgresql:
+  enabled: true
+  auth:
+    username: sonar
+    password: sonar
+    database: sonarqube
+
+persistence:
+  enabled: true
+  size: 10Gi
+  storageClass: gp2
+
+monitoringPasscodeSecretName: sonarqube-monitoring
+monitoringPasscodeSecretKey: monitoringPasscode
+
+resources:
+  requests:
+    cpu: "500m"
+    memory: "1Gi"
+  limits:
+    cpu: "1"
+    memory: "2Gi"
+```
+
+### Step 3: Add this to root main.tf file
+```
+module "sonarqube" {
+  source = "./modules/sonarqube"
+
+  depends_on = [ module.eks ]
+}
+```
+
+### Step 4: Run
+```
+terraform init
+terraform apply
+kubectl get pods -n sonarqube
+```
+
+### Step 5: Expose sonarqube using ingress. Create sonarqube-ingress.yaml inside k8/sonarqube
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sonarqube-ingress
+  namespace: sonarqube
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sonarqube-sonarqube
+                port:
+                  number: 9000
+
+```
+
+### Step 6: Run
+```
+kubectl apply sonarqube-ingress.yaml
+kubectl get ingress sonarqube-ingress -n sonarqube
+kubectl get svc -n sonarqube
+```
+*you will get a link like this "http://k8s-jenkins-jenkinsi-c237ef4fb5-316841084.ap-south-1.elb.amazonaws.com/" open in browser.*
+
+
+### Step 7: Create Dockerhub secret for Kaniko
 ```
 kubectl create secret docker-registry dockerhub-secret \
   --docker-username=<your-username> \
@@ -352,3 +472,40 @@ kubectl create secret docker-registry dockerhub-secret \
   -n jenkins
 
 ```
+
+### Step 8: Run the pipeline
+
+
+ritesh@LAPTOP-BEPRR95P:/mnt/c/Users/rites/Desktop/DRP 2/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project/k8/sonarqube$ kubectl get nodes -A
+NAME                                       STATUS   ROLES    AGE   VERSION
+ip-10-0-3-56.ap-south-1.compute.internal   Ready    <none>   28h   v1.34.3-eks-70ce843
+ip-10-0-4-79.ap-south-1.compute.internal   Ready    <none>   29m   v1.34.3-eks-70ce843
+ritesh@LAPTOP-BEPRR95P:/mnt/c/Users/rites/Desktop/DRP 2/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project/k8/sonarqube$ kubectl get pods
+No resources found in default namespace.
+ritesh@LAPTOP-BEPRR95P:/mnt/c/Users/rites/Desktop/DRP 2/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project/k8/sonarqube$ kubectl get pods -A
+NAMESPACE     NAME                                                READY   STATUS             RESTARTS          AGE
+argocd        argocd-application-controller-0                     1/1     Running            0                 23h
+argocd        argocd-applicationset-controller-5796dcfc94-xqq2l   0/1     CrashLoopBackOff   197 (3m57s ago)   23h
+argocd        argocd-dex-server-6d57f6f6b6-l4dd9                  1/1     Running            0                 23h
+argocd        argocd-notifications-controller-bb4f97f47-2d8lj     1/1     Running            0                 23h
+argocd        argocd-redis-6dfddccb76-4gmgq                       1/1     Running            0                 23h
+argocd        argocd-repo-server-77d887cfb9-dx96f                 1/1     Running            0                 23h
+argocd        argocd-server-7fb8c5f74-ct2vb                       1/1     Running            0                 23h
+dev           backend-587864f54-q8tpr                             1/1     Running            0                 23h
+dev           frontend-7b9bf5f5f4-dvk4r                           1/1     Running            0                 23h
+dev           mongodb-56f7d756b4-h2czj                            1/1     Running            0                 21h
+jenkins       frontend-ci-1-15bkq-f9xc6-48l06                     6/6     Running            0                 117s
+jenkins       jenkins-0                                           2/2     Running            0                 3h13m
+kube-system   aws-load-balancer-controller-dbd98cfc5-nwvpv        1/1     Running            0                 25h
+kube-system   aws-load-balancer-controller-dbd98cfc5-p2sp5        1/1     Running            0                 25h
+kube-system   aws-node-mdhg8                                      2/2     Running            0                 28h  
+kube-system   aws-node-shdhs                                      2/2     Running            0                 30m  
+kube-system   coredns-c57cc66d8-464tt                             1/1     Running            0                 28h  
+kube-system   coredns-c57cc66d8-697gs                             1/1     Running            0                 28h  
+kube-system   ebs-csi-controller-84f5c8d4c9-lwgg8                 6/6     Running            0                 18h  
+kube-system   ebs-csi-controller-84f5c8d4c9-m8wlx                 6/6     Running            0                 18h  
+kube-system   ebs-csi-node-8ljlg                                  3/3     Running            0                 18h  
+kube-system   ebs-csi-node-fwzmn                                  3/3     Running            0                 30m  
+kube-system   kube-proxy-h5slg                                    1/1     Running            0                 30m  
+kube-system   kube-proxy-q7rxv                                    1/1     Running            0                 28h  
+sonarqube     sonarqube-sonarqube-0 

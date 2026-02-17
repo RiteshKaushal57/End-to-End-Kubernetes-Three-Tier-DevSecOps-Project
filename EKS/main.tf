@@ -18,13 +18,19 @@ module "eks" {
   vpc_id = module.vpc.vpc_id
   subnet_ids = module.vpc.private_subnet_ids
   node_instance_type = "t3.large"
-  desired_size = 1
-  min_size = 1
+  desired_size = 2
+  min_size = 2
   max_size = 2
 }
 
 module "jenkins" {
   source = "./modules/jenkins"
+
+  depends_on = [ module.eks ]
+}
+
+module "sonarqube" {
+  source = "./modules/sonarqube"
 
   depends_on = [ module.eks ]
 }
