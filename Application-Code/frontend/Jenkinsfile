@@ -113,18 +113,12 @@ spec:
     container('trivy') {
       dir('Application-Code/frontend') {
         sh '''
-          trivy fs --severity HIGH,CRITICAL \
-                   --format json \
-                   -o trivy-report.json .
+          trivy fs --severity HIGH,CRITICAL --format table -.
         '''
       }
     }
   }
-  post {
-    always {
-      archiveArtifacts artifacts: 'Application-Code/frontend/trivy-report.json', fingerprint: true
-    }
-  }
+  
 }
 
 
