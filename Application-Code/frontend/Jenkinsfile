@@ -42,6 +42,9 @@ spec:
     - name: kaniko-secret
       secret:
         secretName: dockerhub-secret
+        items:
+          - key: .dockerconfigjson
+            path: config.json
 """
       defaultContainer 'node'
     }
