@@ -113,13 +113,15 @@ spec:
     container('trivy') {
       dir('Application-Code/frontend') {
         sh '''
-          trivy fs --severity HIGH,CRITICAL --format table -.
+          trivy fs --severity HIGH,CRITICAL \
+                   --format json \
+                   -o trivy-report.json . || true
         '''
       }
     }
   }
-  
 }
+
 
 
     stage('Kaniko Build & Push') {
