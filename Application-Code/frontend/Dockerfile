@@ -3,7 +3,6 @@ FROM node:16-alpine AS builder
 
 WORKDIR /app
 
-ENV NODE_OPTIONS=--openssl-legacy-provider
 ENV CI=true
 
 # Install dependencies first
