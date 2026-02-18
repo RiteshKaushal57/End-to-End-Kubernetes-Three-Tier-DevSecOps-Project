@@ -169,27 +169,28 @@ spec:
     stage('Git Commit & Push') {
   steps {
     container('git-tools') {
-      dir("${WORKSPACE}") {
 
-        checkout scm
-        
-        withCredentials([usernamePassword(
-          credentialsId: 'git-creds',
-          usernameVariable: 'GIT_USER',
-          passwordVariable: 'GIT_PASS'
-        )]) {
-          sh '''
-            git config user.email "ci@jenkins"
-            git config user.name "jenkins-ci"
+      sh 'ls -la'   // optional debug
 
-            git add ${HELM_VALUES_FILE}
-            git commit -m "chore(frontend): bump image to ${IMAGE_TAG}" || echo "No changes"
+      withCredentials([usernamePassword(
+        credentialsId: 'git-creds',
+        usernameVariable: 'GIT_USER',
+        passwordVariable: 'GIT_PASS'
+      )]) {
+        sh '''
+          git config --global user.email "ci@jenkins"
+          git config --global user.name "jenkins-ci"
 
-            git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project.git HEAD:main
-          '''
-        }
+          git add ${HELM_VALUES_FILE}
+          git commit -m "chore(frontend): bump image to ${IMAGE_TAG}" || echo "No changes"
+
+          git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project.git HEAD:main
+        '''
       }
     }
+  }
+}
+
   }
 }
 
