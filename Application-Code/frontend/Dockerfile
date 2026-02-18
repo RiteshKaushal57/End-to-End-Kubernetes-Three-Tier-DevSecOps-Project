@@ -3,7 +3,7 @@ FROM node:16-alpine AS builder
 
 WORKDIR /app
 
-ENV CI=true
+USER root
 
 # Install dependencies first
 COPY package*.json ./
@@ -12,6 +12,11 @@ RUN npm ci
 # Copy rest of source
 COPY . .
 
+RUN chown -R node:node /app
+
+USER node
+
+ENV CI=true
 ARG REACT_APP_BACKEND_URL
 ENV REACT_APP_BACKEND_URL=/api/tasks
 
