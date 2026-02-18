@@ -170,6 +170,9 @@ spec:
   steps {
     container('git-tools') {
       dir("${WORKSPACE}") {
+
+        checkout scm
+        
         withCredentials([usernamePassword(
           credentialsId: 'git-creds',
           usernameVariable: 'GIT_USER',
