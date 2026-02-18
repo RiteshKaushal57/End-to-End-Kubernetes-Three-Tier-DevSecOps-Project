@@ -181,6 +181,8 @@ spec:
           git config --global user.email "ci@jenkins"
           git config --global user.name "jenkins-ci"
 
+          git config --global --add safe.directory /home/jenkins/agent/workspace/frontend-ci
+
           git add ${HELM_VALUES_FILE}
           git commit -m "chore(frontend): bump image to ${IMAGE_TAG}" || echo "No changes"
 
