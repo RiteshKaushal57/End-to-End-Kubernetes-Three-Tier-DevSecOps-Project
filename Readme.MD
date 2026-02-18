@@ -22,20 +22,6 @@ helm install sonarqube sonarqube/sonarqube \
   --create-namespace \
   -f values.yaml
 
-taskkill /IM "Docker Desktop.exe" /F
-taskkill /IM "com.docker.backend.exe" /F
-taskkill /IM "com.docker.proxy.exe" /F
-
-dism.exe /online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux /all /norestart
-dism.exe /online /enable-feature /featurename:VirtualMachinePlatform /all /norestart
-
-wsl --install --no-distribution
-wsl --update
-
-wsl --status
-
-Get-Service *lxss*
-
 
 kind create cluster --name devsecops
 kubectl config get-contexts
@@ -474,6 +460,44 @@ kubectl create secret docker-registry dockerhub-secret \
 ```
 
 ### Step 8: Run the pipeline
+
+## Phase : Argocd application
+
+### Create Argocd ingress under k8/argocd/argocd-ingress.yaml
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-ingress
+  namespace: argocd
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/backend-protocol: HTTP
+spec:
+  ingressClassName: alb
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: argocd-server
+            port:
+              number: 80
+```
+kubectl apply argocd-ingress.yaml
+kubectl get ingress -n argocd
+kubectl get svc -n argocd
+
+*this yaml is wrong. i used port forward here instead.*
+
+sk1-TKPVGgrPGyE5
+
+
+
+
 
 
 ritesh@LAPTOP-BEPRR95P:/mnt/c/Users/rites/Desktop/DRP 2/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project/k8/sonarqube$ kubectl get nodes -A

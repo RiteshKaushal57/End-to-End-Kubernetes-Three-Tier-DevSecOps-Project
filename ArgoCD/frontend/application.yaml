@@ -7,7 +7,7 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/RiteshKaushal57/End-to-End-DevOps-Project.git
+    repoURL: https://github.com/RiteshKaushal57/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project.git
     targetRevision: main
     path: ArgoCD/frontend
     helm:
