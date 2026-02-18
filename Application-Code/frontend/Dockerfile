@@ -3,9 +3,12 @@ FROM node:16-alpine AS builder
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
+ENV NODE_OPTIONS=--openssl-legacy-provider
+ENV CI=true
+
+# Install dependencies first
 COPY package*.json ./
-RUN npm install
+RUN npm ci
 
 # Copy rest of source
 COPY . .
@@ -19,11 +22,14 @@ RUN npm run build
 # ---------- Production Stage ----------
 FROM nginx:alpine
 
+RUN rm -rf /usr/share/nginx/html/*
+
 COPY --from=builder /app/build /usr/share/nginx/html
 
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
+
 
 
 
