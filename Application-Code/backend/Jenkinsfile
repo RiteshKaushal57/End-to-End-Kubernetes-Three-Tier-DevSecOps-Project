@@ -179,7 +179,7 @@ spec:
               git config --global user.email "ci@jenkins"
               git config --global user.name "jenkins-ci"
 
-              git config --global --add safe.directory /home/jenkins/agent/workspace/backend-ci
+              git config --global --add safe.directory $(pwd)
 
               git add ${HELM_VALUES_FILE}
               git commit -m "chore(backend): bump image to ${IMAGE_TAG}" || echo "No changes"
