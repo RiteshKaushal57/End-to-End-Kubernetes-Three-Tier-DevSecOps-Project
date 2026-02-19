@@ -492,7 +492,9 @@ kubectl get ingress -n argocd
 kubectl get svc -n argocd
 
 *this yaml is wrong. i used port forward here instead.*
-
+```
+kubectl port-forward svc/argocd-server -n argocd 8080:80
+```
 sk1-TKPVGgrPGyE5
 
 
