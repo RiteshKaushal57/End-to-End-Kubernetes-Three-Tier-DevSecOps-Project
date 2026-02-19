@@ -167,6 +167,7 @@ spec:
     stage('Git Commit & Push') {
       steps {
         container('git-tools') {
+          sh 'ls -la'   // optional debug
 
           withCredentials([usernamePassword(
             credentialsId: 'git-creds',
