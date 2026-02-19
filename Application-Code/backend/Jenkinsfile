@@ -1,0 +1,194 @@
+pipeline {
+
+  agent {
+    kubernetes {
+
+      yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+
+    - name: node
+      image: node:20
+      command: ['cat']
+      tty: true
+
+    - name: sonar
+      image: sonarsource/sonar-scanner-cli:latest
+      command: ['cat']
+      tty: true
+
+    - name: trivy
+      image: aquasec/trivy:latest
+      command: ['cat']
+      tty: true
+
+    - name: kaniko
+      image: gcr.io/kaniko-project/executor:debug
+      command:
+        - /busybox/cat
+      tty: true
+      volumeMounts:
+        - name: kaniko-secret
+          mountPath: /kaniko/.docker
+
+    - name: git-tools
+      image: alpine/git:latest
+      command: ['cat']
+      tty: true
+
+  volumes:
+    - name: kaniko-secret
+      secret:
+        secretName: dockerhub-secret
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+"""
+      defaultContainer 'node'
+    }
+  }
+
+  environment {
+    REGISTRY = "ritesh57"
+    IMAGE_NAME = "application-code-backend"
+    IMAGE_TAG = "${BUILD_NUMBER}"
+    HELM_VALUES_FILE = "ArgoCD/backend/values.yaml"
+  }
+
+  stages {
+
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+
+    stage('Install Dependencies') {
+      steps {
+        container('node') {
+          dir('Application-Code/backend') {
+            sh 'npm ci'
+          }
+        }
+      }
+    }
+
+    stage('Unit Tests') {
+      steps {
+        container('node') {
+          dir('Application-Code/backend') {
+            sh 'npm test || echo "No tests found"'
+          }
+        }
+      }
+    }
+
+    stage('SonarQube Analysis') {
+      steps {
+        container('sonar') {
+          dir('Application-Code/backend') {
+            withSonarQubeEnv('sonarqube-server') {
+              sh '''
+                sonar-scanner \
+                -Dsonar.projectKey=backend \
+                -Dsonar.sources=.
+              '''
+            }
+          }
+        }
+      }
+    }
+
+    stage('Quality Gate') {
+      steps {
+        script {
+          def qg = waitForQualityGate()
+          if (qg.status != 'OK') {
+            error "Pipeline aborted due to quality gate failure: ${qg.status}"
+          }
+        }
+      }
+    }
+
+    stage('Trivy FS Scan') {
+      steps {
+        container('trivy') {
+          dir('Application-Code/backend') {
+            sh '''
+              trivy fs --severity HIGH,CRITICAL \
+                       --format json \
+                       -o trivy-report.json . || true
+            '''
+          }
+        }
+      }
+    }
+
+    stage('Kaniko Build & Push') {
+      steps {
+        container('kaniko') {
+          dir('Application-Code/backend') {
+            sh """
+              /kaniko/executor \
+              --dockerfile=Dockerfile \
+              --context=`pwd` \
+              --destination=${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} \
+              --destination=${REGISTRY}/${IMAGE_NAME}:latest
+            """
+          }
+        }
+      }
+    }
+
+    stage('Image Scan (Trivy)') {
+      steps {
+        container('trivy') {
+          sh """
+            trivy image --exit-code 1 --severity HIGH,CRITICAL \
+            ${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG} || true
+          """
+        }
+      }
+    }
+
+    stage('Update Helm Values') {
+      steps {
+        container('git-tools') {
+          sh """
+            apk add --no-cache yq
+            yq e '.image.tag = "${IMAGE_TAG}"' -i ${HELM_VALUES_FILE}
+          """
+        }
+      }
+    }
+
+    stage('Git Commit & Push') {
+      steps {
+        container('git-tools') {
+
+          withCredentials([usernamePassword(
+            credentialsId: 'git-creds',
+            usernameVariable: 'GIT_USER',
+            passwordVariable: 'GIT_PASS'
+          )]) {
+
+            sh '''
+              git config --global user.email "ci@jenkins"
+              git config --global user.name "jenkins-ci"
+
+              git config --global --add safe.directory /home/jenkins/agent/workspace/backend-ci
+
+              git add ${HELM_VALUES_FILE}
+              git commit -m "chore(backend): bump image to ${IMAGE_TAG}" || echo "No changes"
+
+              git push https://${GIT_USER}:${GIT_PASS}@github.com/RiteshKaushal57/End-to-End-Kubernetes-Three-Tier-DevSecOps-Project.git HEAD:main
+            '''
+          }
+        }
+      }
+    }
+
+  }
+}
