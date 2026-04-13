@@ -170,8 +170,6 @@ spec:
   steps {
     container('git-tools') {
 
-      sh 'ls -la'   // optional debug
-
       withCredentials([usernamePassword(
         credentialsId: 'git-creds',
         usernameVariable: 'GIT_USER',
